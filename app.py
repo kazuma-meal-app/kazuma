@@ -21,35 +21,44 @@ if "total_cal" not in st.session_state:
     st.session_state.total_c = 0
     st.session_state.history = []
 
-# 📅 サイドバー設定
+# 📅 サイドバー設定（目標入力）
 st.sidebar.header("🎯 俺の目標設定")
-# カロリーの目標値を画面上で自由に変えられるボックス（初期値2500）
-cal_target = st.sidebar.number_input("🔥 目標摂取カロリー (kcal)", value=2500, step=50)
+cal_target = st.sidebar.number_input("🔥 目標カロリー (kcal)", value=2500, step=50)
+p_target = st.sidebar.number_input("💪 目標タンパク質 (g)", value=146, step=5)
+f_target = st.sidebar.number_input("🥑 目標脂質 (g)", value=60, step=5)
+c_target = st.sidebar.number_input("🌾 目標炭水化物 (g)", value=340, step=10)
+
+# 復活させた目標入力欄！
 run_goal = st.sidebar.text_input("🏃‍♂️ ランニング目標", value="現状維持・体力向上")
 body_goal = st.sidebar.text_input("💪 体づくりの目標", value="フィジーク系ボディメイク（消費カロリー維持・タンパク質146g死守）")
 
 st.sidebar.write("---")
-st.sidebar.header("📅 今日の合計栄養素")
+st.sidebar.header("📅 今日の摂取状況と残り")
 
-# 📊 カロリーメーターの計算
+# 各種メーターと「あと何g/kcal」の計算
 cal_current = st.session_state.total_cal
+cal_left = max(cal_target - cal_current, 0)
 cal_progress = min(cal_current / cal_target, 1.0) if cal_target > 0 else 0.0
-
-st.sidebar.metric(label="🔥 カロリー", value=f"{cal_current} / {cal_target} kcal")
+st.sidebar.metric(label="🔥 カロリー", value=f"{cal_current} / {cal_target} kcal", delta=f"あと {cal_left} kcal", delta_color="inverse")
 st.sidebar.progress(cal_progress)
-st.sidebar.write(f" 📈 カロリー目標 達成度: {cal_progress*100:.1f}%")
 
-# 📊 タンパク質146gメーターの計算
-p_target = 146.0
 p_current = st.session_state.total_p
-p_progress = min(p_current / p_target, 1.0)
-
-st.sidebar.metric(label="💪 タンパク質", value=f"{p_current:.1f} / {p_target:.1f} g")
+p_left = max(p_target - p_current, 0.0)
+p_progress = min(p_current / p_target, 1.0) if p_target > 0 else 0.0
+st.sidebar.metric(label="💪 タンパク質(P)", value=f"{p_current:.1f} / {p_target:.1f} g", delta=f"あと {p_left:.1f} g", delta_color="inverse")
 st.sidebar.progress(p_progress)
-st.sidebar.write(f" 📈 タンパク質目標 達成度: {p_progress*100:.1f}%")
 
-st.sidebar.write(f"🥑 脂質(F): {st.session_state.total_f:.1f} g")
-st.sidebar.write(f"🌾 炭水化物(C): {st.session_state.total_c:.1f} g")
+f_current = st.session_state.total_f
+f_left = max(f_target - f_current, 0.0)
+f_progress = min(f_current / f_target, 1.0) if f_target > 0 else 0.0
+st.sidebar.metric(label="🥑 脂質(F)", value=f"{f_current:.1f} / {f_target:.1f} g", delta=f"あと {f_left:.1f} g", delta_color="inverse")
+st.sidebar.progress(f_progress)
+
+c_current = st.session_state.total_c
+c_left = max(c_target - c_current, 0.0)
+c_progress = min(c_current / c_target, 1.0) if c_target > 0 else 0.0
+st.sidebar.metric(label="🌾 炭水化物(C)", value=f"{c_current:.1f} / {c_target:.1f} g", delta=f"あと {c_left:.1f} g", delta_color="inverse")
+st.sidebar.progress(c_progress)
 
 if st.sidebar.button("今日のデータをリセット"):
     st.session_state.total_cal = 0
@@ -66,118 +75,55 @@ if st.session_state.history:
         st.sidebar.write(f"・{meal}")
 
 
-st.title("📸 俺専用・カロリーPFC判定 (Wメーター最強版)")
-st.write("食事の写真をアップロードするか、スマホのカメラで撮ってね。")
+st.title("📸 俺専用・最強ボディメイクAI (究極完全体)")
 
-uploaded_file = st.file_uploader("画像を選択...", type=["jpg", "jpeg", "png"])
+# プロっぽいタブ切り替えUIを搭載
+tab1, tab2 = st.tabs(["📸 画像から解析", "✍️ 文字入力で追加"])
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption='選択された画像', use_container_width=True)
+# 共通のプロンプトの土台
+base_instruction = f"""
+提供された情報から、カロリー、PFCバランス、各具材ごとのカロリー内訳を分析し、必ず以下のJSONフォーマットのみで返答してください。余計な解説テキストは含めず、純粋なJSONデータだけを出力してください。
 
-    if st.button("AIで解析スタート"):
-        # AIにも一真くんが設定した今日の目標カロリーを共有して、より精密にアドバイスさせるよ！
-        prompt = f"""
-        提供された料理の画像から、カロリー、PFCバランス、各具材ごとのカロリー内訳を分析し、必ず以下のJSONフォーマットのみで返答してください。余計な解説テキストは含めず、純粋なJSONデータだけを出力してください。
+【ユーザーのボディメイク方針】
+・目的: フィジーク選手のような、引き締まった筋肉質な体作り
+・カロリー方針: 1日の総摂取カロリーターゲットは {cal_target} kcal です。消費カロリー付近を維持するクリーンゲインズを狙います。
+・タンパク質目標: 1日あたり {p_target}g を確実に摂取する。
+・その他の目標設定: {run_goal} / {body_goal}
 
-        なお、ユーザーは現在、以下の明確なボディメイク方針を持っています。この方針を踏まえて、この食事がターゲットにどう貢献するか、具体的なアドバイスや改善提案を必ず「reason」の後半に含めてください。
+breakdownの中の「base_rate」には、その具材のカロリー計算の基準となった数値（例:「168kcal/100g」や「90kcal/1個」など）を記載してください。
 
-        【ユーザーのボディメイク方針】
-        ・目的: フィジーク選手のような、引き締まった筋肉質な体作り
-        ・カロリー方針: 1日の総摂取カロリーのターゲットは【 {cal_target} kcal 】です。増量期のように太るわけでも、減量期のように削るわけでもなく、この消費カロリー付近を維持することを目指しています。
-        ・タンパク質目標: 1日あたり 146g （体重73kg × 2倍）を確実に摂取する。
-        ・その他の設定: {run_goal} / {body_goal}
+{{
+  "food_name": "料理名または入力された食事",
+  "estimated_calories_kcal": 合計カロリー(数値),
+  "protein_g": タンパク質(数値),
+  "fat_g": 脂質(数値),
+  "carbohydrates_g": 炭水化物(数値),
+  "breakdown": [
+    {{
+      "item": "具材や食品名1", 
+      "calories": "〇〇kcal",
+      "base_rate": "〇〇kcal / 100g あたり(または1個あたり)"
+    }}
+  ],
+  "reason": "計算の根拠と、フィジーク系ボディメイク方針に合わせた具体的なアドバイス"
+}}
+"""
 
-        breakdownの中の「base_rate」には、その具材のカロリー計算の基準となった数値（例:「168kcal/100g」や「90kcal/1個」など）を記載してください。
+parsed_data = None
 
-        {{
-          "food_name": "料理名",
-          "estimated_calories_kcal": 合計カロリー(数値),
-          "protein_g": タンパク質(数値),
-          "fat_g": 脂質(数値),
-          "carbohydrates_g": 炭水化物(数値),
-          "breakdown": [
-            {{
-              "item": "具材や調味料1", 
-              "calories": "〇〇kcal",
-              "base_rate": "〇〇kcal / 100g あたり(または1個あたり)"
-            }}
-          ],
-          "reason": "計算の根拠と、フィジーク系ボディメイク方針（目標カロリー・タンパク質目標）に合わせた具体的なアドバイス"
-        }}
-        """
+# --- タブ1: 画像解析 ---
+with tab1:
+    st.write("食事の写真をアップロードするか、スマホのカメラで撮ってね。")
+    uploaded_file = st.file_uploader("画像を選択...", type=["jpg", "jpeg", "png"])
 
-        with st.spinner("AIが計算中..."):
-            try:
-                response = model.generate_content([prompt, image])
-                
-                raw_text = response.text.strip()
-                if raw_text.startswith("```json"):
-                    raw_text = raw_text[7:]
-                if raw_text.endswith("```"):
-                    raw_text = raw_text[:-3]
-                raw_text = raw_text.strip()
-                
-                data = json.loads(raw_text)
-                
-                # 📊 画面表示
-                st.header(f"🍳 {data.get('food_name', '分析された料理')}")
-                st.metric(label="🔥 推定総カロリー", value=f"{data.get('estimated_calories_kcal', 0)} kcal")
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric(label="💪 タンパク質", value=f"{data.get('protein_g', 0)} g")
-                with col2:
-                    st.metric(label="🥑 脂質", value=f"{data.get('fat_g', 0)} g")
-                with col3:
-                    st.metric(label="🌾 炭水化物", value=f"{data.get('carbohydrates_g', 0)} g")
-                
-                # 📊 PFC割合の円グラフ
-                p = data.get('protein_g', 0)
-                f = data.get('fat_g', 0)
-                c = data.get('carbohydrates_g', 0)
-                
-                if p + f + c > 0:
-                    st.write("### 📈 PFC割合（バランス）")
-                    labels = ['Protein (P)', 'Fat (F)', 'Carbs (C)']
-                    sizes = [p, f, c]
-                    colors = ['#ff9999','#66b3ff','#99ff99']
-                    
-                    fig, ax = plt.subplots(figsize=(5, 5))
-                    fig.patch.set_alpha(0.0)
-                    ax.patch.set_alpha(0.0)
-                    
-                    wedges, texts, autotexts = ax.pie(
-                        sizes, labels=labels, colors=colors, 
-                        autopct='%1.1f%%', startangle=90,
-                        textprops=dict(color="white")
-                    )
-                    ax.axis('equal')
-                    st.pyplot(fig)
-                
-                # 🥗 具材ごとのカロリー内訳＋基準値を表示
-                st.write("### 🥗 具材ごとのカロリー内訳")
-                breakdown_list = data.get("breakdown", [])
-                if breakdown_list:
-                    for b in breakdown_list:
-                        item_name = b.get('item', '不明')
-                        cals = b.get('calories', '0kcal')
-                        rate = b.get('base_rate', '基準データなし')
-                        st.write(f"・**{item_name}**: {cals}  *(基準: {rate})*")
-                
-                # 📝 アドバイス
-                st.write("### 🏃‍♂️ 俺専用コーチのアドバイス・根拠")
-                st.write(data.get("reason", "なし"))
-                
-                # 💾 データを今日の合計に自動加算
-                st.session_state.total_cal += data.get('estimated_calories_kcal', 0)
-                st.session_state.total_p += data.get('protein_g', 0)
-                st.session_state.total_f += data.get('fat_g', 0)
-                st.session_state.total_c += data.get('carbohydrates_g', 0)
-                st.session_state.history.append(data.get('food_name', '不明な料理'))
-                
-                st.success("今日の合計データに追加したよ！")
-                st.sidebar.button("画面を更新してメーターに反映", key="refresh_btn")
-                
-            except Exception as e:
-                st.error(f"エラーが発生しました: {e}")
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, caption='選択された画像', use_container_width=True)
+
+        if st.button("AI画像解析スタート"):
+            with st.spinner("AI画像解析中..."):
+                try:
+                    prompt = "画像の料理を解析してください。\n" + base_instruction
+                    response = model.generate_content([prompt, image])
+                    raw_text = response.text.strip()
+                    if raw_text.startswith("
