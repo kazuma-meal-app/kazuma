@@ -8,7 +8,7 @@ if "GEMINI_API_KEY" in st.secrets:
 else:
     st.error("APIキーが設定されていません。StreamlitのAdvanced settingsで設定してください。")
 
-model = genai.GenerativeModel('gemini-1.5-flash') # 最新の安定モデルにしておくね
+model = genai.GenerativeModel('gemini-2.5-flash') # 最新の安定モデルにしておくね
 
 st.title("📸 俺専用・カロリーPFC判定")
 st.write("食事の写真をアップロードするか、スマホのカメラで撮ね。")
