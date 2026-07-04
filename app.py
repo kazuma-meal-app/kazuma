@@ -10,7 +10,7 @@ if "GEMINI_API_KEY" in st.secrets:
 else:
     st.error("APIキーが設定されていません。StreamlitのAdvanced settingsで設定してください。")
 
-# モデルは一真くんが見つけた大正解の2.5-flash！
+# モデルは2.5-flash
 model = genai.GenerativeModel('gemini-2.5-flash')
 
 # 💾 飯ログ用：データを記憶しておく設定
@@ -21,10 +21,33 @@ if "total_cal" not in st.session_state:
     st.session_state.total_c = 0
     st.session_state.history = []
 
-# 📅 サイドバーに今日の合計を表示
+# 📅 サイドバー設定
+st.sidebar.header("🎯 俺の目標設定")
+# カロリーの目標値を画面上で自由に変えられるボックス（初期値2500）
+cal_target = st.sidebar.number_input("🔥 目標摂取カロリー (kcal)", value=2500, step=50)
+run_goal = st.sidebar.text_input("🏃‍♂️ ランニング目標", value="現状維持・体力向上")
+body_goal = st.sidebar.text_input("💪 体づくりの目標", value="フィジーク系ボディメイク（消費カロリー維持・タンパク質146g死守）")
+
+st.sidebar.write("---")
 st.sidebar.header("📅 今日の合計栄養素")
-st.sidebar.metric(label="🔥 総摂取カロリー", value=f"{st.session_state.total_cal} kcal")
-st.sidebar.write(f"💪 タンパク質(P): {st.session_state.total_p:.1f} g")
+
+# 📊 カロリーメーターの計算
+cal_current = st.session_state.total_cal
+cal_progress = min(cal_current / cal_target, 1.0) if cal_target > 0 else 0.0
+
+st.sidebar.metric(label="🔥 カロリー", value=f"{cal_current} / {cal_target} kcal")
+st.sidebar.progress(cal_progress)
+st.sidebar.write(f" 📈 カロリー目標 達成度: {cal_progress*100:.1f}%")
+
+# 📊 タンパク質146gメーターの計算
+p_target = 146.0
+p_current = st.session_state.total_p
+p_progress = min(p_current / p_target, 1.0)
+
+st.sidebar.metric(label="💪 タンパク質", value=f"{p_current:.1f} / {p_target:.1f} g")
+st.sidebar.progress(p_progress)
+st.sidebar.write(f" 📈 タンパク質目標 達成度: {p_progress*100:.1f}%")
+
 st.sidebar.write(f"🥑 脂質(F): {st.session_state.total_f:.1f} g")
 st.sidebar.write(f"🌾 炭水化物(C): {st.session_state.total_c:.1f} g")
 
@@ -43,7 +66,7 @@ if st.session_state.history:
         st.sidebar.write(f"・{meal}")
 
 
-st.title("📸 俺専用・カロリーPFC判定 (基準値つき最強版)")
+st.title("📸 俺専用・カロリーPFC判定 (Wメーター最強版)")
 st.write("食事の写真をアップロードするか、スマホのカメラで撮ってね。")
 
 uploaded_file = st.file_uploader("画像を選択...", type=["jpg", "jpeg", "png"])
@@ -53,29 +76,35 @@ if uploaded_file is not None:
     st.image(image, caption='選択された画像', use_container_width=True)
 
     if st.button("AIで解析スタート"):
-        # 💡 【アップデート】「base_rate」という基準値の項目をプロンプトに追加したよ！
-        prompt = """
+        # AIにも一真くんが設定した今日の目標カロリーを共有して、より精密にアドバイスさせるよ！
+        prompt = f"""
         提供された料理の画像から、カロリー、PFCバランス、各具材ごとのカロリー内訳を分析し、必ず以下のJSONフォーマットのみで返答してください。余計な解説テキストは含めず、純粋なJSONデータだけを出力してください。
 
-        なお、ユーザーは現在「10kmを45分切りするための長距離ランニングのトレーニング」と「引き締まった体作り（筋肉維持と脂肪燃焼）」を両立しています。この目標を踏まえて、この食事がトレーニングのエネルギー補給や筋肉のリカバリーにどう影響するか、具体的なアドバイスや改善提案を必ず「reason」の後半に含めてください。
+        なお、ユーザーは現在、以下の明確なボディメイク方針を持っています。この方針を踏まえて、この食事がターゲットにどう貢献するか、具体的なアドバイスや改善提案を必ず「reason」の後半に含めてください。
+
+        【ユーザーのボディメイク方針】
+        ・目的: フィジーク選手のような、引き締まった筋肉質な体作り
+        ・カロリー方針: 1日の総摂取カロリーのターゲットは【 {cal_target} kcal 】です。増量期のように太るわけでも、減量期のように削るわけでもなく、この消費カロリー付近を維持することを目指しています。
+        ・タンパク質目標: 1日あたり 146g （体重73kg × 2倍）を確実に摂取する。
+        ・その他の設定: {run_goal} / {body_goal}
 
         breakdownの中の「base_rate」には、その具材のカロリー計算の基準となった数値（例:「168kcal/100g」や「90kcal/1個」など）を記載してください。
 
-        {
+        {{
           "food_name": "料理名",
           "estimated_calories_kcal": 合計カロリー(数値),
           "protein_g": タンパク質(数値),
           "fat_g": 脂質(数値),
           "carbohydrates_g": 炭水化物(数値),
           "breakdown": [
-            {
+            {{
               "item": "具材や調味料1", 
               "calories": "〇〇kcal",
               "base_rate": "〇〇kcal / 100g あたり(または1個あたり)"
-            }
+            }}
           ],
-          "reason": "計算の根拠と、長距離ランナー・体作り視点での具体的なアドバイス"
-        }
+          "reason": "計算の根拠と、フィジーク系ボディメイク方針（目標カロリー・タンパク質目標）に合わせた具体的なアドバイス"
+        }}
         """
 
         with st.spinner("AIが計算中..."):
@@ -126,7 +155,7 @@ if uploaded_file is not None:
                     ax.axis('equal')
                     st.pyplot(fig)
                 
-                # 🥗 【アップデート】具材ごとのカロリー内訳＋基準値を表示！
+                # 🥗 具材ごとのカロリー内訳＋基準値を表示
                 st.write("### 🥗 具材ごとのカロリー内訳")
                 breakdown_list = data.get("breakdown", [])
                 if breakdown_list:
@@ -134,11 +163,10 @@ if uploaded_file is not None:
                         item_name = b.get('item', '不明')
                         cals = b.get('calories', '0kcal')
                         rate = b.get('base_rate', '基準データなし')
-                        # 画面に「具材名: 〇〇kcal (基準: 〇〇kcal/100g)」の形で出すよ
                         st.write(f"・**{item_name}**: {cals}  *(基準: {rate})*")
                 
                 # 📝 アドバイス
-                st.write("### 🏃‍♂️ アスリート向けアドバイス・根拠")
+                st.write("### 🏃‍♂️ 俺専用コーチのアドバイス・根拠")
                 st.write(data.get("reason", "なし"))
                 
                 # 💾 データを今日の合計に自動加算
@@ -149,6 +177,7 @@ if uploaded_file is not None:
                 st.session_state.history.append(data.get('food_name', '不明な料理'))
                 
                 st.success("今日の合計データに追加したよ！")
+                st.sidebar.button("画面を更新してメーターに反映", key="refresh_btn")
                 
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
